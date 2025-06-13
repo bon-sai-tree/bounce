@@ -24,6 +24,9 @@ import Clutter from 'gi://Clutter';
 // Import our window utilities
 import * as WindowUtils from './window.js';
 
+// Track custom window order for Fibonacci tiling
+const windowOrder = [];
+
 // Tiling mode constants
 export const TilingMode = {
     FIBONACCI: 0,
@@ -221,12 +224,31 @@ function fibonacciTiling(windows) {
     // Calculate window positions based on Fibonacci sequence
     const windowRects = calculateFibonacciRects(workArea, windows.length);
     
-    // Reverse the array so that the newest window (typically at the start of the array)
-    // gets the smallest frame (at the end of the windowRects array)
-    const windowsReversed = [...windows].reverse();
+    // Clean up windowOrder list - remove windows that no longer exist
+    for (let i = windowOrder.length - 1; i >= 0; i--) {
+        if (!windows.includes(windowOrder[i])) {
+            windowOrder.splice(i, 1);
+        }
+    }
+    
+    // Add any new windows to the end of the windowOrder (smallest frame)
+    windows.forEach(window => {
+        if (!windowOrder.includes(window)) {
+            windowOrder.push(window);
+        }
+    });
+    
+    // Make sure the order only has the active windows
+    const orderedWindows = [...windowOrder].filter(window => windows.includes(window));
+    
+    // If order doesn't match current window count (edge case), reinitialize
+    if (orderedWindows.length !== windows.length) {
+        windowOrder.length = 0;
+        windowOrder.push(...windows);
+    }
     
     // Apply the calculated positions to windows
-    windowsReversed.forEach((window, i) => {
+    orderedWindows.forEach((window, i) => {
         const rect = windowRects[i];
         WindowUtils.bounceWindowToPosition(
             window,
@@ -336,6 +358,64 @@ export function enableTiling() {
              (op >= Meta.GrabOp.RESIZING_N && op <= Meta.GrabOp.KEYBOARD_RESIZING_SW));
         
         if (tilingEnabled && window && isRegularWindow(window) && isMoveResize) {
+            // Check if it's a move operation
+            const isMove = (op === Meta.GrabOp.MOVING || 
+                          op === Meta.GrabOp.KEYBOARD_MOVING || 
+                          op === Meta.GrabOp.MOVING_UNCONSTRAINED);
+            
+            if (isMove && currentMode === TilingMode.FIBONACCI) {
+                // Calculate which window this was moved over
+                const movedWindow = window;
+                const movedWindowRect = movedWindow.get_frame_rect();
+                const movedWindowCenter = {
+                    x: movedWindowRect.x + movedWindowRect.width / 2,
+                    y: movedWindowRect.y + movedWindowRect.height / 2
+                };
+                
+                // Get all windows
+                const workspace = global.workspace_manager.get_active_workspace();
+                const allWindows = global.display.get_tab_list(Meta.TabList.NORMAL, workspace)
+                                 .filter(isRegularWindow);
+                
+                // Find which window this was dragged onto
+                let targetWindow = null;
+                let maxOverlap = 0;
+                
+                allWindows.forEach(w => {
+                    if (w === movedWindow) return;
+                    
+                    const rect = w.get_frame_rect();
+                    
+                    // Simple check if center of moved window is inside target window
+                    if (movedWindowCenter.x >= rect.x && 
+                        movedWindowCenter.x <= rect.x + rect.width &&
+                        movedWindowCenter.y >= rect.y && 
+                        movedWindowCenter.y <= rect.y + rect.height) {
+                        
+                        const area = rect.width * rect.height;
+                        if (area > maxOverlap) {
+                            maxOverlap = area;
+                            targetWindow = w;
+                        }
+                    }
+                });
+                
+                if (targetWindow) {
+                    // Get the indices of both windows in our order
+                    const movedIndex = windowOrder.indexOf(movedWindow);
+                    const targetIndex = windowOrder.indexOf(targetWindow);
+                    
+                    if (movedIndex >= 0 && targetIndex >= 0) {
+                        // Remove the moved window from its current position
+                        windowOrder.splice(movedIndex, 1);
+                        // Insert it at the target window's position
+                        windowOrder.splice(targetIndex, 0, movedWindow);
+                        
+                        console.log(`[Bounce] Moved window to position ${targetIndex}`);
+                    }
+                }
+            }
+            
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10, () => {
                 tileWindows();
                 return GLib.SOURCE_REMOVE;
@@ -352,6 +432,12 @@ export function enableTiling() {
     const windowCreatedSignal = global.display.connect('window-created', (display, window) => {
         if (tilingEnabled && isRegularWindow(window)) {
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                if (currentMode === TilingMode.FIBONACCI) {
+                    // For Fibonacci mode, make sure new windows are at the end (smallest frame)
+                    if (!windowOrder.includes(window)) {
+                        windowOrder.push(window);
+                    }
+                }
                 tileWindows();
                 return GLib.SOURCE_REMOVE;
             });
@@ -366,6 +452,13 @@ export function enableTiling() {
     // Handle window destruction and retile
     const windowDestroyedSignal = global.window_manager.connect('destroy', (wm, actor) => {
         if (tilingEnabled && actor.meta_window && isRegularWindow(actor.meta_window)) {
+            // Remove the window from our custom order if it exists
+            const destroyedWindow = actor.meta_window;
+            const index = windowOrder.indexOf(destroyedWindow);
+            if (index >= 0) {
+                windowOrder.splice(index, 1);
+            }
+            
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
                 tileWindows();
                 return GLib.SOURCE_REMOVE;
@@ -438,6 +531,9 @@ export function disableTiling() {
     
     // Clear window position tracking
     lastWindowPositions.clear();
+    
+    // Clear custom window order
+    windowOrder.length = 0;
     
     // Disconnect all signals
     signalConnections.forEach(conn => {
