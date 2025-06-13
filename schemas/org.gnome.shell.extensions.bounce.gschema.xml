@@ -7,14 +7,14 @@
       <description>Keyboard shortcut to center and resize all windows on current workspace</description>
     </key>
     <key name="toggle-tiling" type="as">
-      <default><![CDATA[['<Super>t']]]></default>
-      <summary>Toggle tiling</summary>
-      <description>Keyboard shortcut to toggle Fibonacci tiling for windows</description>
+      <default><![CDATA[['<Super>z']]]></default>
+      <summary>Toggle static tiling</summary>
+      <description>Keyboard shortcut to toggle static Fibonacci tiling for windows</description>
     </key>
-    <key name="cycle-tiling-mode" type="as">
-      <default><![CDATA[['<Super>m']]]></default>
-      <summary>Cycle tiling mode</summary>
-      <description>Keyboard shortcut to cycle between tiling modes (Fibonacci, Horizontal, Grid)</description>
+    <key name="toggle-dynamic-tiling" type="as">
+      <default><![CDATA[['<Super>t']]]></default>
+      <summary>Toggle dynamic tiling</summary>
+      <description>Keyboard shortcut to toggle dynamic tiling for windows</description>
     </key>
   </schema>
 </schemalist>

@@ -23,6 +23,7 @@ import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as WindowUtils from './window.js';
 import * as TilingUtils from './tiling.js';
+import * as DynamicUtils from './dynamic.js';
 
 /**
  * Keybindings class to handle keyboard shortcuts for the Bounce extension
@@ -50,7 +51,7 @@ class BounceKeybindings extends GObject.Object {
             this._toggleBounce.bind(this)
         );
         
-        // Add the "t" keybinding to toggle tiling with Super+t
+        // Add the "z" keybinding to toggle static tiling with Super+z
         Main.wm.addKeybinding(
             'toggle-tiling',
             this._extension.getSettings(),
@@ -59,7 +60,14 @@ class BounceKeybindings extends GObject.Object {
             this._toggleTiling.bind(this)
         );
         
-        // Removed tiling mode cycling keybinding as we only have Fibonacci mode
+        // Add the "t" keybinding to toggle dynamic tiling with Super+t
+        Main.wm.addKeybinding(
+            'toggle-dynamic-tiling',
+            this._extension.getSettings(),
+            Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
+            Shell.ActionMode.NORMAL,
+            this._toggleDynamicTiling.bind(this)
+        );
 
         console.log('[Bounce] Keybindings enabled');
     }
@@ -71,7 +79,7 @@ class BounceKeybindings extends GObject.Object {
         // Remove the keybindings
         Main.wm.removeKeybinding('toggle-bounce');
         Main.wm.removeKeybinding('toggle-tiling');
-        // Removed cycle-tiling-mode keybinding as we only have Fibonacci mode
+        Main.wm.removeKeybinding('toggle-dynamic-tiling');
         
         console.log('[Bounce] Keybindings disabled');
     }
@@ -99,10 +107,10 @@ class BounceKeybindings extends GObject.Object {
     }
     
     /**
-     * Handler for toggling tiling with Super+t
+     * Handler for toggling static tiling with Super+z
      */
     _toggleTiling() {
-        console.log('[Bounce] Tiling toggle triggered via keyboard shortcut');
+        console.log('[Bounce] Static tiling toggle triggered via keyboard shortcut');
         
         // Get the tiling toggle from the indicator
         if (this._extension._indicator) {
@@ -123,22 +131,29 @@ class BounceKeybindings extends GObject.Object {
     }
     
     /**
-     * Handler for cycling tiling modes with Super+m
+     * Handler for toggling dynamic tiling with Super+t
      */
-    _cycleTilingMode() {
-        console.log('[Bounce] Cycling tiling mode via keyboard shortcut');
+    _toggleDynamicTiling() {
+        console.log('[Bounce] Dynamic tiling toggle triggered via keyboard shortcut');
         
-        const newMode = TilingUtils.cycleTilingMode();
-        
-        // Update the mode menu item if available
-        if (this._extension._indicator && 
-            this._extension._indicator._tilingToggle &&
-            this._extension._indicator._tilingToggle._modeMenuItem) {
-            this._extension._indicator._tilingToggle._modeMenuItem.label.text = _(`Tiling Mode: ${newMode}`);
+        // Make sure we disable fixed tiling if it's active
+        if (TilingUtils.isTilingEnabled()) {
+            TilingUtils.disableTiling();
         }
         
-        console.log(`[Bounce] Tiling mode changed to: ${newMode}`);
+        // Toggle dynamic tiling
+        if (DynamicUtils.isDynamicTilingEnabled()) {
+            DynamicUtils.disableDynamicTiling();
+            console.log('[Bounce] Dynamic tiling disabled');
+        } else {
+            DynamicUtils.enableDynamicTiling();
+            console.log('[Bounce] Dynamic tiling enabled');
+        }
     }
+    
+    /**
+     * Build our binding definitions
+     */
 
     /**
      * Build our binding definitions
