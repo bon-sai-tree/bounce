@@ -20,12 +20,14 @@ import GObject from 'gi://GObject';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
-import {QuickToggle, SystemIndicator} from 'resource:///org/gnome/shell/ui/quickSettings.js';
+import {QuickToggle, SystemIndicator, QuickMenuToggle} from 'resource:///org/gnome/shell/ui/quickSettings.js';
+import {PopupMenuItem} from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as WindowUtils from './window.js';
+import * as TilingUtils from './tiling.js';
 import {BounceKeybindings} from './keybindings.js';
 
-const ExampleToggle = GObject.registerClass(
-class ExampleToggle extends QuickToggle {
+const BounceToggle = GObject.registerClass(
+class BounceToggle extends QuickToggle {
     constructor() {
         super({
             title: _('Bounce'),
@@ -45,26 +47,66 @@ class ExampleToggle extends QuickToggle {
     }
 });
 
-const ExampleIndicator = GObject.registerClass(
-class ExampleIndicator extends SystemIndicator {
+const TilingToggle = GObject.registerClass(
+class TilingToggle extends QuickMenuToggle {
+    constructor() {
+        super({
+            title: _('Tiling'),
+            iconName: 'view-grid-symbolic',
+            toggleMode: true,
+            menuEnabled: true,
+        });
+
+        // Create a menu item for toggling tiling modes
+        const modeItem = new PopupMenuItem(_(`Tiling Mode: ${TilingUtils.getModeString()}`));
+        modeItem.connect('activate', () => {
+            const newMode = TilingUtils.cycleTilingMode();
+            modeItem.label.text = _(`Tiling Mode: ${newMode}`);
+        });
+
+        // Store a reference so we can update it from keybindings
+        this._modeMenuItem = modeItem;
+        
+        // Add the menu item properly
+        this.menu.addMenuItem(modeItem);
+
+        this.connect('notify::checked', () => {
+            if (this.checked) {
+                console.log('[Bounce] Tiling activated');
+                TilingUtils.enableTiling();
+            } else {
+                console.log('[Bounce] Tiling deactivated');
+                TilingUtils.disableTiling();
+            }
+        });
+    }
+});
+
+const BounceIndicator = GObject.registerClass(
+class BounceIndicator extends SystemIndicator {
     constructor() {
         super();
 
         this._indicator = this._addIndicator();
-        this._indicator.iconName = 'face-smile-symbolic';
+        this._indicator.iconName = 'view-grid-symbolic';
 
-        const toggle = new ExampleToggle();
-        toggle.bind_property('checked',
+        // Add the bounce toggle
+        this._bounceToggle = new BounceToggle();
+        this.quickSettingsItems.push(this._bounceToggle);
+        
+        // Add the tiling toggle
+        this._tilingToggle = new TilingToggle();
+        this._tilingToggle.bind_property('checked',
             this._indicator, 'visible',
             GObject.BindingFlags.SYNC_CREATE);
-        this.quickSettingsItems.push(toggle);
+        this.quickSettingsItems.push(this._tilingToggle);
     }
 });
 
-export default class QuickSettingsExampleExtension extends Extension {
+export default class BounceExtension extends Extension {
     enable() {
         // Initialize the indicator for the quick settings menu
-        this._indicator = new ExampleIndicator();
+        this._indicator = new BounceIndicator();
         console.log("[Bounce] Extension enabled");
         Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
         
@@ -74,8 +116,9 @@ export default class QuickSettingsExampleExtension extends Extension {
     }
 
     disable() {
-        // Make sure force centering is disabled
+        // Make sure force centering and tiling are disabled
         WindowUtils.disableForceCentering();
+        TilingUtils.disableTiling();
         
         // Clean up the indicator
         this._indicator.quickSettingsItems.forEach(item => item.destroy());

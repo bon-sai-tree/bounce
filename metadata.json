@@ -1,6 +1,6 @@
 {
-  "name": "Bouncing Window Tiller",
-  "description": "Tilling windows with some bounce!",
+  "name": "Fibonacci Window Tiler",
+  "description": "Auto-tile windows in a Fibonacci spiral pattern with bounce animation!",
   "uuid": "bounce@bon-sai-tree.github.io",
   "shell-version": [
     "48"

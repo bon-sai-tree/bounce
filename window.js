@@ -35,7 +35,7 @@ function isRegularWindow(window) {
            window.get_maximized() === 0;
 }
 
-function bounceWindowToPosition(window, targetX, targetY, targetWidth, targetHeight) {
+export function bounceWindowToPosition(window, targetX, targetY, targetWidth, targetHeight) {
     if (!isRegularWindow(window)) return false;
     
     window.unmaximize(Meta.MaximizeFlags.BOTH);

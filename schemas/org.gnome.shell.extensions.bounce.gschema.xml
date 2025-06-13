@@ -6,5 +6,15 @@
       <summary>Toggle bounce</summary>
       <description>Keyboard shortcut to center and resize all windows on current workspace</description>
     </key>
+    <key name="toggle-tiling" type="as">
+      <default><![CDATA[['<Super>t']]]></default>
+      <summary>Toggle tiling</summary>
+      <description>Keyboard shortcut to toggle Fibonacci tiling for windows</description>
+    </key>
+    <key name="cycle-tiling-mode" type="as">
+      <default><![CDATA[['<Super>m']]]></default>
+      <summary>Cycle tiling mode</summary>
+      <description>Keyboard shortcut to cycle between tiling modes (Fibonacci, Horizontal, Grid)</description>
+    </key>
   </schema>
 </schemalist>

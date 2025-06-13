@@ -22,6 +22,7 @@ import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as WindowUtils from './window.js';
+import * as TilingUtils from './tiling.js';
 
 /**
  * Keybindings class to handle keyboard shortcuts for the Bounce extension
@@ -48,6 +49,24 @@ class BounceKeybindings extends GObject.Object {
             Shell.ActionMode.NORMAL,
             this._toggleBounce.bind(this)
         );
+        
+        // Add the "t" keybinding to toggle tiling with Super+t
+        Main.wm.addKeybinding(
+            'toggle-tiling',
+            this._extension.getSettings(),
+            Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
+            Shell.ActionMode.NORMAL,
+            this._toggleTiling.bind(this)
+        );
+        
+        // Add the "m" keybinding to cycle tiling modes with Super+m
+        Main.wm.addKeybinding(
+            'cycle-tiling-mode',
+            this._extension.getSettings(),
+            Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
+            Shell.ActionMode.NORMAL,
+            this._cycleTilingMode.bind(this)
+        );
 
         console.log('[Bounce] Keybindings enabled');
     }
@@ -56,8 +75,10 @@ class BounceKeybindings extends GObject.Object {
      * Disable all keybindings
      */
     disable() {
-        // Remove the keybinding
+        // Remove the keybindings
         Main.wm.removeKeybinding('toggle-bounce');
+        Main.wm.removeKeybinding('toggle-tiling');
+        Main.wm.removeKeybinding('cycle-tiling-mode');
         
         console.log('[Bounce] Keybindings disabled');
     }
@@ -68,9 +89,9 @@ class BounceKeybindings extends GObject.Object {
     _toggleBounce() {
         console.log('[Bounce] Toggle triggered via keyboard shortcut');
         
-        // Get the toggle from the indicator
+        // Get the bounce toggle from the indicator
         if (this._extension._indicator) {
-            const toggle = this._extension._indicator.quickSettingsItems[0];
+            const toggle = this._extension._indicator._bounceToggle;
             
             // Toggle the checked state
             toggle.checked = !toggle.checked;
@@ -81,8 +102,50 @@ class BounceKeybindings extends GObject.Object {
         } else {
             // If the indicator isn't available for some reason, just center the windows directly
             WindowUtils.centerAllWindows();
+        }
+    }
+    
+    /**
+     * Handler for toggling tiling with Super+t
+     */
+    _toggleTiling() {
+        console.log('[Bounce] Tiling toggle triggered via keyboard shortcut');
+        
+        // Get the tiling toggle from the indicator
+        if (this._extension._indicator) {
+            const toggle = this._extension._indicator._tilingToggle;
+            
+            // Toggle the checked state
+            toggle.checked = !toggle.checked;
+            
+            console.log(`[Bounce] Tiling state changed to: ${toggle.checked ? 'on' : 'off'}`);
+        } else {
+            // If the indicator isn't available for some reason, just toggle tiling directly
+            if (TilingUtils.isTilingEnabled()) {
+                TilingUtils.disableTiling();
+            } else {
+                TilingUtils.enableTiling();
             }
         }
+    }
+    
+    /**
+     * Handler for cycling tiling modes with Super+m
+     */
+    _cycleTilingMode() {
+        console.log('[Bounce] Cycling tiling mode via keyboard shortcut');
+        
+        const newMode = TilingUtils.cycleTilingMode();
+        
+        // Update the mode menu item if available
+        if (this._extension._indicator && 
+            this._extension._indicator._tilingToggle &&
+            this._extension._indicator._tilingToggle._modeMenuItem) {
+            this._extension._indicator._tilingToggle._modeMenuItem.label.text = _(`Tiling Mode: ${newMode}`);
+        }
+        
+        console.log(`[Bounce] Tiling mode changed to: ${newMode}`);
+    }
 
     /**
      * Build our binding definitions
