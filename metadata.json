@@ -1,0 +1,8 @@
+{
+  "name": "Bouncing Window Tiller",
+  "description": "Tilling windows with some bounce!",
+  "uuid": "bounce@bon-sai-tree.github.io",
+  "shell-version": [
+    "48"
+  ]
+}
