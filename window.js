@@ -329,34 +329,125 @@ function animateBounceToCenter(window) {
     // Start with the target size
     window.move_resize_frame(false, frameRect.x, frameRect.y, targetWidth, targetHeight);
     
-    // Calculate bounce parameters - we want to start from the current position
-    // and bounce toward the center, not in the opposite direction
-    
     // For debugging
     console.log(`[Bounce] Current position: ${frameRect.x},${frameRect.y} Target: ${targetX},${targetY}`);
     
-    // Start the animation from the current position
-    // No need to move the window as it's already at the starting position
+    // We need to track the animation and keep the frame position in sync with the actor
+    // This prevents the window from jumping at the end of the animation
     
+    // Store initial actor position to calculate offset
+    const initialActorX = windowActor.x;
+    const initialActorY = windowActor.y;
+    
+    // Calculate the offset between actor position and frame position
+    // This can happen because the actor and frame don't always perfectly match
+    const offsetX = frameRect.x - initialActorX;
+    const offsetY = frameRect.y - initialActorY;
+    
+    console.log(`[Bounce] Actor position: ${initialActorX},${initialActorY} with offset: ${offsetX},${offsetY}`);
     console.log(`[Bounce] Animating from ${frameRect.x},${frameRect.y} to center at ${targetX},${targetY}`);
     
-    // First resize the window immediately to target size
-    window.move_resize_frame(false, frameRect.x, frameRect.y, targetWidth, targetHeight);
+    // Set up animation tracking to update the frame position during animation
+    let timeoutId = null;
+    const frameUpdateIntervalMs = 10; // Faster updates for smoother sync (close to 100fps)
+    
+    // Create a sync function to keep window frame in sync with actor
+    const syncFrameToActor = () => {
+        if (!window.get_compositor_private()) {
+            // Window was destroyed during animation, clean up
+            if (timeoutId !== null) {
+                GLib.source_remove(timeoutId);
+                timeoutId = null;
+            }
+            return GLib.SOURCE_REMOVE;
+        }
+        
+        // Get current actor position (which is being animated)
+        const currentActorX = windowActor.x;
+        const currentActorY = windowActor.y;
+        
+        // Update the frame position to match the actor position (accounting for offset)
+        // We need exact precision here to avoid even small jumps
+        const newFrameX = Math.round(currentActorX + offsetX);
+        const newFrameY = Math.round(currentActorY + offsetY);
+        
+        // Get current frame position to check if we actually need to update
+        const currentFrameRect = window.get_frame_rect();
+        
+        // Only update if there's a difference to avoid unnecessary operations
+        if (currentFrameRect.x !== newFrameX || currentFrameRect.y !== newFrameY) {
+            console.log(`[Bounce] Sync frame to: ${newFrameX},${newFrameY} from actor: ${currentActorX},${currentActorY}`);
+            window.move_frame(false, newFrameX, newFrameY);
+        }
+        
+        return GLib.SOURCE_CONTINUE;
+    };
     
     // Use the built-in Clutter animation system with elastic bounce effect
     windowActor.ease({
-        x: targetX,
-        y: targetY, 
+        x: targetX - offsetX, // Adjust for the offset
+        y: targetY - offsetY,
         duration: BOUNCE_DURATION,
         mode: EASE_OUT_ELASTIC,
         onComplete: () => {
-            // Ensure the window is exactly at the target position and size
-            window.move_resize_frame(true, targetX, targetY, targetWidth, targetHeight);
-            console.log(`[Bounce] Completed animation for: ${window.get_title()}`);
+            // Stop the frame sync when animation completes
+            if (timeoutId !== null) {
+                GLib.source_remove(timeoutId);
+                timeoutId = null;
+            }
+            
+            // Final sync of frame to exactly match the target position
+            // This ensures there's no final jump after the animation
+            syncFrameToActor();
+            
+            // Wait a tiny bit to ensure the compositor has fully updated
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10, () => {
+                // Set final position and size exactly
+                window.move_resize_frame(true, targetX, targetY, targetWidth, targetHeight);
+                
+                // Set the actor position explicitly as well to ensure 
+                // the window and actor are completely in sync
+                windowActor.set_position(targetX - offsetX, targetY - offsetY);
+                
+                // Double-check the sync after a short delay to ensure everything is aligned
+                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+                    ensureWindowSync(window);
+                    
+                    // Final position check and correction if needed
+                    const finalRect = window.get_frame_rect();
+                    if (finalRect.x !== targetX || finalRect.y !== targetY) {
+                        console.log(`[Bounce] Final position correction: from ${finalRect.x},${finalRect.y} to ${targetX},${targetY}`);
+                        window.move_frame(true, targetX, targetY);
+                    }
+                    
+                    return GLib.SOURCE_REMOVE;
+                });
+                
+                console.log(`[Bounce] Completed animation for: ${window.get_title()}`);
+                return GLib.SOURCE_REMOVE;
+            });
         }
     });
     
-    console.log(`[Bounce] Started bounce animation for window: ${window.get_title()}`);
+    // Start the frame sync interval
+    timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, frameUpdateIntervalMs, syncFrameToActor);
+    
+    // Additionally connect to the "paint" signal to get even better synchronization
+    // This ensures we update exactly when the frame is being rendered
+    let paintSignalId = global.stage.connect('paint', () => {
+        if (window.get_compositor_private()) {
+            syncFrameToActor();
+        }
+    });
+    
+    // Make sure to disconnect this signal when the animation completes
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, BOUNCE_DURATION + 100, () => {
+        if (paintSignalId) {
+            global.stage.disconnect(paintSignalId);
+            paintSignalId = null;
+        }
+        return GLib.SOURCE_REMOVE;
+    });
     
     console.log(`[Bounce] Started bounce animation for: ${window.get_title()}`);
     return true;
@@ -386,4 +477,34 @@ function centerAllWindowsInitial() {
     
     console.log(`[Bounce] Successfully centered ${centeredCount} windows`);
     return centeredCount;
+}
+
+/**
+ * Ensures a window's frame and actor are perfectly aligned
+ * This helps prevent any possible jumps after animations
+ * 
+ * @param {Meta.Window} window - The window to sync
+ */
+function ensureWindowSync(window) {
+    if (!window || !isRegularWindow(window)) return;
+    
+    const windowActor = window.get_compositor_private();
+    if (!windowActor) return;
+    
+    // Get current position of the window frame
+    const frameRect = window.get_frame_rect();
+    
+    // Get current position of the actor
+    const actorX = windowActor.x;
+    const actorY = windowActor.y;
+    
+    // Calculate the offset
+    const offsetX = frameRect.x - actorX;
+    const offsetY = frameRect.y - actorY;
+    
+    // If there's any significant difference, sync them
+    if (Math.abs(offsetX) > 1 || Math.abs(offsetY) > 1) {
+        console.log(`[Bounce] Correcting window sync mismatch: frame=${frameRect.x},${frameRect.y} actor=${actorX},${actorY}`);
+        window.move_frame(true, frameRect.x, frameRect.y);
+    }
 }
