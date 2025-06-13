@@ -22,14 +22,13 @@ function getWorkArea() {
     return workspace.get_work_area_for_monitor(global.display.get_primary_monitor());
 }
 
-function addWindow(window) {
-    const rect = window.get_frame_rect();
+function addWindow(window, x, y, width, height) {
     windows.push({
         window: window,
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height
+        x: x,
+        y: y,
+        width: width,
+        height: height
     });
 }
 
@@ -37,15 +36,17 @@ function removeWindow(window) {
     windows = windows.filter(w => w.window !== window);
 }
 
-function updateWindow(window) {
-    const item = windows.find(w => w.window === window);
-    if (item) {
-        const rect = window.get_frame_rect();
-        item.x = rect.x;
-        item.y = rect.y;
-        item.width = rect.width;
-        item.height = rect.height;
-    }
+function updateWindow(window, newX, newY, newWidth, newHeight) {
+    // Remove the window from tracking
+    removeWindow(window);
+    // Add it back with the new coordinates
+    windows.push({
+        window: window,
+        x: newX,
+        y: newY,
+        width: newWidth,
+        height: newHeight
+    });
 }
 
 function findWindowAt(x, y) {
@@ -81,6 +82,8 @@ function splitWindow(existingItem, newWindow, sector) {
             WindowUtils.bounceWindowToPosition(newWindow, x, y, leftWidth, height);
             WindowUtils.bounceWindowToPosition(existingItem.window, x + leftWidth, y, width - leftWidth, height);
             console.log(`[Bounce] AFTER split - existing window moved to: (${x + leftWidth}, ${y}) ${width - leftWidth}x${height}`);
+            updateWindow(existingItem.window, x + leftWidth, y, width - leftWidth, height);
+            addWindow(newWindow, x, y, leftWidth, height);
             break;
         case 'right':
             const rightWidth = Math.floor(width / GOLDEN_RATIO);
@@ -88,6 +91,8 @@ function splitWindow(existingItem, newWindow, sector) {
             WindowUtils.bounceWindowToPosition(newWindow, x + width - rightWidth, y, rightWidth, height);
             WindowUtils.bounceWindowToPosition(existingItem.window, x, y, width - rightWidth, height);
             console.log(`[Bounce] AFTER split - existing window resized to: (${x}, ${y}) ${width - rightWidth}x${height}`);
+            updateWindow(existingItem.window, x, y, width - rightWidth, height);
+            addWindow(newWindow, x + width - rightWidth, y, rightWidth, height);
             break;
         case 'top':
             const topHeight = Math.floor(height / GOLDEN_RATIO);
@@ -95,6 +100,8 @@ function splitWindow(existingItem, newWindow, sector) {
             WindowUtils.bounceWindowToPosition(newWindow, x, y, width, topHeight);
             WindowUtils.bounceWindowToPosition(existingItem.window, x, y + topHeight, width, height - topHeight);
             console.log(`[Bounce] AFTER split - existing window moved to: (${x}, ${y + topHeight}) ${width}x${height - topHeight}`);
+            updateWindow(existingItem.window, x, y + topHeight, width, height - topHeight);
+            addWindow(newWindow, x, y, width, topHeight);
             break;
         case 'bottom':
             const bottomHeight = Math.floor(height / GOLDEN_RATIO);
@@ -102,10 +109,10 @@ function splitWindow(existingItem, newWindow, sector) {
             WindowUtils.bounceWindowToPosition(newWindow, x, y + height - bottomHeight, width, bottomHeight);
             WindowUtils.bounceWindowToPosition(existingItem.window, x, y, width, height - bottomHeight);
             console.log(`[Bounce] AFTER split - existing window resized to: (${x}, ${y}) ${width}x${height - bottomHeight}`);
+            updateWindow(existingItem.window, x, y, width, height - bottomHeight);
+            addWindow(newWindow, x, y + height - bottomHeight, width, bottomHeight);
             break;
     }
-    
-    updateWindow(existingItem.window);
 }
 
 function tileAll() {
@@ -120,12 +127,45 @@ function tileAll() {
     
     if (activeWindows.length === 1) {
         WindowUtils.bounceWindowToPosition(activeWindows[0], workArea.x, workArea.y, workArea.width, workArea.height);
-        addWindow(activeWindows[0]);
+        addWindow(activeWindows[0], workArea.x, workArea.y, workArea.width, workArea.height);
         return;
     }
     
     fibonacciTile(activeWindows, workArea.x, workArea.y, workArea.width, workArea.height);
-    activeWindows.forEach(addWindow);
+    // After fibonacci tiling, we need to reconstruct the positions without querying windows
+    // For simplicity, let's re-calculate and add them
+    const positions = calculateFibonacciPositions(activeWindows, workArea.x, workArea.y, workArea.width, workArea.height);
+    for (let i = 0; i < activeWindows.length; i++) {
+        const pos = positions[i];
+        addWindow(activeWindows[i], pos.x, pos.y, pos.width, pos.height);
+    }
+}
+
+function calculateFibonacciPositions(windowList, x, y, width, height) {
+    const positions = [];
+    calculateFibonacciPositionsRecursive(windowList, x, y, width, height, positions);
+    return positions;
+}
+
+function calculateFibonacciPositionsRecursive(windowList, x, y, width, height, positions) {
+    if (windowList.length === 0) return;
+    
+    if (windowList.length === 1) {
+        positions.push({ x, y, width, height });
+        return;
+    }
+    
+    const rest = windowList.slice(1);
+    
+    if (width > height) {
+        const firstWidth = Math.floor(width / GOLDEN_RATIO);
+        positions.push({ x, y, width: firstWidth, height });
+        calculateFibonacciPositionsRecursive(rest, x + firstWidth, y, width - firstWidth, height, positions);
+    } else {
+        const firstHeight = Math.floor(height / GOLDEN_RATIO);
+        positions.push({ x, y, width, height: firstHeight });
+        calculateFibonacciPositionsRecursive(rest, x, y + firstHeight, width, height - firstHeight, positions);
+    }
 }
 
 function fibonacciTile(windowList, x, y, width, height) {
@@ -160,7 +200,9 @@ export function enableDynamicTiling() {
     const grabEnd = global.display.connect('grab-op-end', (display, window, op) => {
         if (enabled && isValidWindow(window) && (op === Meta.GrabOp.MOVING || op >= Meta.GrabOp.RESIZING_N)) {
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10, () => {
-                updateWindow(window);
+                // For user-initiated moves/resizes, we simply remove and re-add based on our current tracking
+                // The user's manual positioning breaks our tiling logic anyway
+                removeWindow(window);
                 return GLib.SOURCE_REMOVE;
             });
         }
@@ -177,7 +219,7 @@ export function enableDynamicTiling() {
             if (targetWindow) {
                 const sector = getSector(targetWindow, x, y);
                 splitWindow(targetWindow, window, sector);
-                addWindow(window);
+                // splitWindow already handles adding the new window with correct coordinates
             } else {
                 tileAll();
             }
