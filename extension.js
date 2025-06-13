@@ -36,9 +36,10 @@ class ExampleToggle extends QuickToggle {
         this.connect('notify::checked', () => {
             if (this.checked) {
                 console.log('[Bounce] Toggle activated');
-                WindowUtils.centerAllWindows();
+                WindowUtils.enableForceCentering();
             } else {
                 console.log('[Bounce] Toggle deactivated');
+                WindowUtils.disableForceCentering();
             }
         });
     }
@@ -73,6 +74,9 @@ export default class QuickSettingsExampleExtension extends Extension {
     }
 
     disable() {
+        // Make sure force centering is disabled
+        WindowUtils.disableForceCentering();
+        
         // Clean up the indicator
         this._indicator.quickSettingsItems.forEach(item => item.destroy());
         console.log("[Bounce] Extension disabled");

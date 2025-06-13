@@ -18,6 +18,13 @@
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import Meta from 'gi://Meta';
+import GLib from 'gi://GLib';
+
+// Track signals so we can disconnect them later
+let signalConnections = [];
+
+// Flag to track if bounce mode is enabled
+let bounceEnabled = false;
 
 /**
  * Centers all windows on the current workspace and resizes them to 50% of the screen
@@ -57,17 +64,8 @@ export function centerWindow(window) {
     if (!window) return false;
     
     // Skip special windows that shouldn't be resized
-    if (window.is_skip_taskbar() || 
-        !window.allows_resize() || 
-        !window.allows_move() ||
-        window.get_window_type() !== Meta.WindowType.NORMAL) {
+    if (!isRegularWindow(window)) {
         console.log(`[Bounce] Skipping special window: ${window.get_title()}`);
-        return false;
-    }
-    
-    // Skip if window is fullscreen or maximized (optional, comment out if you want to resize these too)
-    if (window.is_fullscreen() || window.get_maximized() !== 0) {
-        console.log(`[Bounce] Window is fullscreen or maximized, skipping: ${window.get_title()}`);
         return false;
     }
     
@@ -91,4 +89,173 @@ export function centerWindow(window) {
     
     console.log(`[Bounce] Window "${window.get_title()}" centered to ${newX},${newY} with size ${newWidth}x${newHeight}`);
     return true;
+}
+
+/**
+ * Enable bounce mode - windows will return to center after being moved
+ */
+export function enableForceCentering() {
+    if (bounceEnabled) return;
+    
+    console.log('[Bounce] Enabling bounce mode');
+    bounceEnabled = true;
+    
+    // Center all windows first
+    centerAllWindows();
+    
+    // Connect to the grab operation end signal to detect when window moves finish
+    const grabEndSignal = global.display.connect('grab-op-end', (display, metaWindow, grabOp) => {
+        // Only re-center after move or resize operations
+        const isMove = grabOp === Meta.GrabOp.MOVING ||
+            grabOp === Meta.GrabOp.KEYBOARD_MOVING ||
+            grabOp === Meta.GrabOp.MOVING_UNCONSTRAINED ||
+            grabOp === Meta.GrabOp.WINDOW_BASE;
+                      
+        // For debugging, log the grab operation if it's not in our existing conditions
+        if (!isMove && 
+            grabOp !== Meta.GrabOp.NONE && 
+            metaWindow && 
+            grabOp !== Meta.GrabOp.COMPOSITOR && 
+            grabOp !== Meta.GrabOp.WAYLAND_POPUP) {
+            console.log(`[Bounce] Debug: Unhandled grab operation: ${grabOp} on window ${metaWindow.get_title()}`);
+        }
+                        
+        // Let's be more inclusive and handle any resizing operation
+        const isResize = 
+            // Standard resizing operations
+            grabOp === Meta.GrabOp.RESIZING_N ||
+            grabOp === Meta.GrabOp.RESIZING_S || 
+            grabOp === Meta.GrabOp.RESIZING_E ||
+            grabOp === Meta.GrabOp.RESIZING_W ||
+            grabOp === Meta.GrabOp.RESIZING_NE ||
+            grabOp === Meta.GrabOp.RESIZING_NW ||
+            grabOp === Meta.GrabOp.RESIZING_SE ||
+            grabOp === Meta.GrabOp.RESIZING_SW ||
+            
+            // Keyboard resizing operations
+            grabOp === Meta.GrabOp.KEYBOARD_RESIZING_N ||
+            grabOp === Meta.GrabOp.KEYBOARD_RESIZING_S ||
+            grabOp === Meta.GrabOp.KEYBOARD_RESIZING_E ||
+            grabOp === Meta.GrabOp.KEYBOARD_RESIZING_W ||
+            grabOp === Meta.GrabOp.KEYBOARD_RESIZING_NE ||
+            grabOp === Meta.GrabOp.KEYBOARD_RESIZING_NW ||
+            grabOp === Meta.GrabOp.KEYBOARD_RESIZING_SE ||
+            grabOp === Meta.GrabOp.KEYBOARD_RESIZING_SW ||
+            
+            // Other resize operations
+            grabOp === Meta.GrabOp.RESIZING_UNKNOWN ||
+            
+            // Super+middle button can behave as a resize in some configurations
+            grabOp === Meta.GrabOp.WINDOW_BASE || 
+            
+            // Catch-all: any operation that changes frame size should be considered a resize
+            (metaWindow && 
+             bounceEnabled && 
+             metaWindow.get_frame_type() !== Meta.FrameType.TILED &&
+             grabOp !== Meta.GrabOp.NONE &&
+             grabOp !== Meta.GrabOp.COMPOSITOR);
+        
+        if (bounceEnabled && metaWindow && isRegularWindow(metaWindow) && (isMove || isResize)) {
+            console.log(`[Bounce] Window "${metaWindow.get_title()}" ${isMove ? 'moved' : 'resized'} with grab operation: ${grabOp}, returning to center`);
+            
+            // Add a tiny delay to ensure the grab is fully completed
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10, () => {
+                centerWindow(metaWindow);
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+    });
+    
+    signalConnections.push({
+        object: global.display,
+        signalId: grabEndSignal
+    });
+    
+    // Also connect to the 'window-created' signal to center new windows
+    const windowCreatedSignal = global.display.connect('window-created', (display, metaWindow) => {
+        if (bounceEnabled && isRegularWindow(metaWindow)) {
+            // Wait a moment for the window to settle
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                console.log(`[Bounce] New window created: ${metaWindow.get_title()}`);
+                centerWindow(metaWindow);
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+    });
+    
+    signalConnections.push({
+        object: global.display,
+        signalId: windowCreatedSignal
+    });
+    
+    // Also track window size changes independently as a fallback
+    // This helps catch Super+middle button resizes that might not be categorized properly
+    const windowSizeSignal = global.window_manager.connect('size-change', (wm, actor) => {
+        if (!bounceEnabled) return;
+        
+        // Get the metaWindow from the actor
+        const metaWindow = actor.get_meta_window();
+        if (!metaWindow || !isRegularWindow(metaWindow)) return;
+        
+        // Skip if we're in the middle of a grab operation
+        // This avoids duplicate re-centering
+        if (global.display.get_grab_op() !== Meta.GrabOp.NONE) return;
+        
+        console.log(`[Bounce] Window "${metaWindow.get_title()}" size changed (detected by size-change signal)`);
+        
+        // Add a small delay to ensure all size operations are complete
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+            if (bounceEnabled && isRegularWindow(metaWindow)) {
+                centerWindow(metaWindow);
+            }
+            return GLib.SOURCE_REMOVE;
+        });
+    });
+    
+    signalConnections.push({
+        object: global.window_manager,
+        signalId: windowSizeSignal
+    });
+}
+
+/**
+ * Disable bounce mode
+ */
+export function disableForceCentering() {
+    if (!bounceEnabled) return;
+    
+    console.log('[Bounce] Disabling bounce mode');
+    bounceEnabled = false;
+    
+    // Disconnect all signals
+    signalConnections.forEach(connection => {
+        if (connection.object && connection.object.disconnect) {
+            connection.object.disconnect(connection.signalId);
+        }
+    });
+    
+    signalConnections = [];
+}
+
+/**
+ * Check if the window is a regular application window that should be managed
+ */
+function isRegularWindow(window) {
+    if (!window) return false;
+    
+    return !window.is_skip_taskbar() && 
+           window.allows_resize() && 
+           window.allows_move() &&
+           window.get_window_type() === Meta.WindowType.NORMAL &&
+           !window.is_fullscreen() && 
+           window.get_maximized() === 0;
+}
+
+/**
+ * Check if bounce mode is currently enabled
+ * 
+ * @returns {boolean} True if bounce mode is enabled
+ */
+export function isForceCenteringEnabled() {
+    return bounceEnabled;
 }

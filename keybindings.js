@@ -68,15 +68,21 @@ class BounceKeybindings extends GObject.Object {
     _toggleBounce() {
         console.log('[Bounce] Toggle triggered via keyboard shortcut');
         
-        // Center all windows
-        WindowUtils.centerAllWindows();
-        
-        // If you have a toggle state to update in the UI, do that here
+        // Get the toggle from the indicator
         if (this._extension._indicator) {
             const toggle = this._extension._indicator.quickSettingsItems[0];
+            
+            // Toggle the checked state
             toggle.checked = !toggle.checked;
+            
+            // The toggle's notify::checked signal will handle calling centerAllWindows
+            // when checked becomes true, so we don't need to call it directly here
+            console.log(`[Bounce] Toggle state changed to: ${toggle.checked ? 'on' : 'off'}`);
+        } else {
+            // If the indicator isn't available for some reason, just center the windows directly
+            WindowUtils.centerAllWindows();
+            }
         }
-    }
 
     /**
      * Build our binding definitions
