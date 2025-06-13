@@ -364,20 +364,16 @@ export function enableTiling() {
                           op === Meta.GrabOp.MOVING_UNCONSTRAINED);
             
             if (isMove && currentMode === TilingMode.FIBONACCI) {
-                // Calculate which window this was moved over
+                // Get the current mouse position to determine window below cursor
                 const movedWindow = window;
-                const movedWindowRect = movedWindow.get_frame_rect();
-                const movedWindowCenter = {
-                    x: movedWindowRect.x + movedWindowRect.width / 2,
-                    y: movedWindowRect.y + movedWindowRect.height / 2
-                };
+                const [mouseX, mouseY] = global.get_pointer();
                 
                 // Get all windows
                 const workspace = global.workspace_manager.get_active_workspace();
                 const allWindows = global.display.get_tab_list(Meta.TabList.NORMAL, workspace)
                                  .filter(isRegularWindow);
                 
-                // Find which window this was dragged onto
+                // Find which window the mouse cursor is over
                 let targetWindow = null;
                 let maxOverlap = 0;
                 
@@ -386,11 +382,11 @@ export function enableTiling() {
                     
                     const rect = w.get_frame_rect();
                     
-                    // Simple check if center of moved window is inside target window
-                    if (movedWindowCenter.x >= rect.x && 
-                        movedWindowCenter.x <= rect.x + rect.width &&
-                        movedWindowCenter.y >= rect.y && 
-                        movedWindowCenter.y <= rect.y + rect.height) {
+                    // Check if mouse cursor is inside this window
+                    if (mouseX >= rect.x && 
+                        mouseX <= rect.x + rect.width &&
+                        mouseY >= rect.y && 
+                        mouseY <= rect.y + rect.height) {
                         
                         const area = rect.width * rect.height;
                         if (area > maxOverlap) {
