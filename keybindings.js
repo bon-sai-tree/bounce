@@ -1,7 +1,7 @@
 /* keybindings.js
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
+ * it under the terms of the GNU Gener    // Removed cycle tiling mode function as we only have Fibonacci mode nowse as published by
  * the Free Software Foundation, either version 2 of the License, or
  * (at your option) any later version.
  *
@@ -59,14 +59,7 @@ class BounceKeybindings extends GObject.Object {
             this._toggleTiling.bind(this)
         );
         
-        // Add the "m" keybinding to cycle tiling modes with Super+m
-        Main.wm.addKeybinding(
-            'cycle-tiling-mode',
-            this._extension.getSettings(),
-            Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
-            Shell.ActionMode.NORMAL,
-            this._cycleTilingMode.bind(this)
-        );
+        // Removed tiling mode cycling keybinding as we only have Fibonacci mode
 
         console.log('[Bounce] Keybindings enabled');
     }
@@ -78,7 +71,7 @@ class BounceKeybindings extends GObject.Object {
         // Remove the keybindings
         Main.wm.removeKeybinding('toggle-bounce');
         Main.wm.removeKeybinding('toggle-tiling');
-        Main.wm.removeKeybinding('cycle-tiling-mode');
+        // Removed cycle-tiling-mode keybinding as we only have Fibonacci mode
         
         console.log('[Bounce] Keybindings disabled');
     }

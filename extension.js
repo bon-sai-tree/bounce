@@ -57,18 +57,15 @@ class TilingToggle extends QuickMenuToggle {
             menuEnabled: true,
         });
 
-        // Create a menu item for toggling tiling modes
-        const modeItem = new PopupMenuItem(_(`Tiling Mode: ${TilingUtils.getModeString()}`));
-        modeItem.connect('activate', () => {
-            const newMode = TilingUtils.cycleTilingMode();
-            modeItem.label.text = _(`Tiling Mode: ${newMode}`);
-        });
+        // Display the tiling mode (always Fibonacci)
+        const modeLabel = new PopupMenuItem(_(`Tiling Mode: ${TilingUtils.getModeString()}`));
+        modeLabel.sensitive = false;  // Make it non-clickable since there's only one mode
 
-        // Store a reference so we can update it from keybindings
-        this._modeMenuItem = modeItem;
+        // Store a reference
+        this._modeMenuItem = modeLabel;
         
         // Add the menu item properly
-        this.menu.addMenuItem(modeItem);
+        this.menu.addMenuItem(modeLabel);
 
         this.connect('notify::checked', () => {
             if (this.checked) {

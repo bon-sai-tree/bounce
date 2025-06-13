@@ -29,9 +29,7 @@ const windowOrder = [];
 
 // Tiling mode constants
 export const TilingMode = {
-    FIBONACCI: 0,
-    HORIZONTAL: 1,
-    GRID: 2
+    FIBONACCI: 0
 };
 
 // Current tiling mode
@@ -72,18 +70,8 @@ export function tileWindows() {
     
     if (windows.length === 0) return 0;
     
-    // Choose tiling function based on current mode
-    switch (currentMode) {
-        case TilingMode.FIBONACCI:
-            fibonacciTiling(windows);
-            break;
-        case TilingMode.HORIZONTAL:
-            horizontalTiling(windows);
-            break;
-        case TilingMode.GRID:
-            gridTiling(windows);
-            break;
-    }
+    // Always use Fibonacci tiling
+    fibonacciTiling(windows);
     
     // Store the current positions of windows for later drift detection
     windows.forEach(window => {
@@ -260,87 +248,10 @@ function fibonacciTiling(windows) {
     });
 }
 
-function horizontalTiling(windows) {
-    if (windows.length === 0) return;
-    
-    // Get workspace area
-    const primaryMonitor = global.display.get_primary_monitor();
-    const workArea = global.display.get_workspace_manager()
-                     .get_active_workspace()
-                     .get_work_area_for_monitor(primaryMonitor);
-    
-    // Create a safer work area with padding
-    const safeWorkArea = {
-        x: Math.round(workArea.x + WINDOW_PADDING),
-        y: Math.round(workArea.y + WINDOW_PADDING),
-        width: Math.round(workArea.width - WINDOW_PADDING * 2),
-        height: Math.round(workArea.height - WINDOW_PADDING * 2)
-    };
-    
-    const windowHeight = Math.floor((safeWorkArea.height - (windows.length - 1) * WINDOW_PADDING) / windows.length);
-    
-    // Apply horizontal tiling with exact integer positions
-    windows.forEach((window, i) => {
-        const posX = Math.round(safeWorkArea.x);
-        const posY = Math.round(safeWorkArea.y + (windowHeight + WINDOW_PADDING) * i);
-        const width = Math.round(safeWorkArea.width);
-        const height = Math.round(windowHeight);
-        
-        WindowUtils.bounceWindowToPosition(window, posX, posY, width, height);
-    });
-}
 
-function gridTiling(windows) {
-    if (windows.length === 0) return;
-    
-    // Get workspace area
-    const primaryMonitor = global.display.get_primary_monitor();
-    const workArea = global.display.get_workspace_manager()
-                     .get_active_workspace()
-                     .get_work_area_for_monitor(primaryMonitor);
-    
-    // Create a safer work area with padding
-    const safeWorkArea = {
-        x: Math.round(workArea.x + WINDOW_PADDING),
-        y: Math.round(workArea.y + WINDOW_PADDING),
-        width: Math.round(workArea.width - WINDOW_PADDING * 2),
-        height: Math.round(workArea.height - WINDOW_PADDING * 2)
-    };
-    
-    // Calculate grid dimensions
-    const rows = Math.floor(Math.sqrt(windows.length));
-    const cols = Math.ceil(windows.length / rows);
-    
-    const cellWidth = Math.floor((safeWorkArea.width - (cols - 1) * WINDOW_PADDING) / cols);
-    const cellHeight = Math.floor((safeWorkArea.height - (rows - 1) * WINDOW_PADDING) / rows);
-    
-    // Apply grid tiling with exact integer positions
-    windows.forEach((window, i) => {
-        const row = Math.floor(i / cols);
-        const col = i % cols;
-        
-        const posX = Math.round(safeWorkArea.x + (cellWidth + WINDOW_PADDING) * col);
-        const posY = Math.round(safeWorkArea.y + (cellHeight + WINDOW_PADDING) * row);
-        const width = Math.round(cellWidth);
-        const height = Math.round(cellHeight);
-        
-        WindowUtils.bounceWindowToPosition(window, posX, posY, width, height);
-    });
-}
-
-export function cycleTilingMode() {
-    currentMode = (currentMode + 1) % 3; // Cycle through modes
-    tileWindows();
-    return getModeString();
-}
 
 export function getModeString() {
-    switch (currentMode) {
-        case TilingMode.FIBONACCI: return 'Fibonacci';
-        case TilingMode.HORIZONTAL: return 'Horizontal';
-        case TilingMode.GRID: return 'Grid';
-    }
-    return 'Unknown';
+    return 'Fibonacci';
 }
 
 export function enableTiling() {
@@ -363,7 +274,7 @@ export function enableTiling() {
                           op === Meta.GrabOp.KEYBOARD_MOVING || 
                           op === Meta.GrabOp.MOVING_UNCONSTRAINED);
             
-            if (isMove && currentMode === TilingMode.FIBONACCI) {
+            if (isMove) {
                 // Get the current mouse position to determine window below cursor
                 const movedWindow = window;
                 const [mouseX, mouseY] = global.get_pointer();
@@ -428,7 +339,7 @@ export function enableTiling() {
     const windowCreatedSignal = global.display.connect('window-created', (display, window) => {
         if (tilingEnabled && isRegularWindow(window)) {
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-                if (currentMode === TilingMode.FIBONACCI) {
+                {
                     // For Fibonacci mode, make sure new windows are at the end (smallest frame)
                     if (!windowOrder.includes(window)) {
                         windowOrder.push(window);
