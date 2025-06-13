@@ -36,6 +36,153 @@ function removeWindow(window) {
     windows = windows.filter(w => w.window !== window);
 }
 
+function closeWindow(window) {
+    const removedWindow = windows.find(w => w.window === window);
+    if (!removedWindow) return;
+    
+    console.log(`[Bounce] Closing window at (${removedWindow.x}, ${removedWindow.y}) ${removedWindow.width}x${removedWindow.height}`);
+    
+    // Remove from list first
+    removeWindow(window);
+    
+    // Try to fill the empty space by extending adjacent windows
+    fillEmptySpace(removedWindow);
+}
+
+function fillEmptySpace(removedWindow) {
+    const { x, y, width, height } = removedWindow;
+    
+    // Check left border - find windows that share the complete left border
+    if (tryExtendFromBorder('left', x, y, width, height)) return;
+    
+    // Check top border - find windows that share the complete top border  
+    if (tryExtendFromBorder('top', x, y, width, height)) return;
+    
+    // Check right border - find windows that share the complete right border
+    if (tryExtendFromBorder('right', x, y, width, height)) return;
+    
+    // Check bottom border - find windows that share the complete bottom border
+    if (tryExtendFromBorder('bottom', x, y, width, height)) return;
+    
+    console.log(`[Bounce] No adjacent windows found to fill empty space`);
+}
+
+function tryExtendFromBorder(border, x, y, width, height) {
+    let adjacentWindows = [];
+    
+    switch (border) {
+        case 'left':
+            // Find windows whose right edge touches the left edge of removed window
+            adjacentWindows = windows.filter(w => 
+                w.x + w.width === x && 
+                w.y <= y && 
+                w.y + w.height >= y + height
+            );
+            break;
+        case 'top':
+            // Find windows whose bottom edge touches the top edge of removed window
+            adjacentWindows = windows.filter(w => 
+                w.y + w.height === y && 
+                w.x <= x && 
+                w.x + w.width >= x + width
+            );
+            break;
+        case 'right':
+            // Find windows whose left edge touches the right edge of removed window
+            adjacentWindows = windows.filter(w => 
+                w.x === x + width && 
+                w.y <= y && 
+                w.y + w.height >= y + height
+            );
+            break;
+        case 'bottom':
+            // Find windows whose top edge touches the bottom edge of removed window
+            adjacentWindows = windows.filter(w => 
+                w.y === y + height && 
+                w.x <= x && 
+                w.x + w.width >= x + width
+            );
+            break;
+    }
+    
+    if (adjacentWindows.length === 0) return false;
+    
+    // Check if the adjacent windows can completely cover the border
+    if (canCoverCompleteBorder(adjacentWindows, border, x, y, width, height)) {
+        extendWindows(adjacentWindows, border, x, y, width, height);
+        return true;
+    }
+    
+    return false;
+}
+
+function canCoverCompleteBorder(adjacentWindows, border, x, y, width, height) {
+    // Sort windows and check if they can cover the complete border without gaps
+    let sortedWindows = [...adjacentWindows];
+    
+    switch (border) {
+        case 'left':
+        case 'right':
+            // Sort by y coordinate and check vertical coverage
+            sortedWindows.sort((a, b) => a.y - b.y);
+            let currentY = y;
+            for (const window of sortedWindows) {
+                if (window.y > currentY) return false; // Gap found
+                currentY = Math.max(currentY, window.y + window.height);
+            }
+            return currentY >= y + height;
+            
+        case 'top':
+        case 'bottom':
+            // Sort by x coordinate and check horizontal coverage
+            sortedWindows.sort((a, b) => a.x - b.x);
+            let currentX = x;
+            for (const window of sortedWindows) {
+                if (window.x > currentX) return false; // Gap found
+                currentX = Math.max(currentX, window.x + window.width);
+            }
+            return currentX >= x + width;
+    }
+    
+    return false;
+}
+
+function extendWindows(adjacentWindows, border, x, y, width, height) {
+    console.log(`[Bounce] Extending ${adjacentWindows.length} windows from ${border} border`);
+    
+    for (const window of adjacentWindows) {
+        let newX = window.x;
+        let newY = window.y;
+        let newWidth = window.width;
+        let newHeight = window.height;
+        
+        switch (border) {
+            case 'left':
+                // Extend window to the right
+                newWidth += width;
+                break;
+            case 'top':
+                // Extend window downward
+                newHeight += height;
+                break;
+            case 'right':
+                // Extend window to the left
+                newX -= width;
+                newWidth += width;
+                break;
+            case 'bottom':
+                // Extend window upward
+                newY -= height;
+                newHeight += height;
+                break;
+        }
+        
+        console.log(`[Bounce] Extending window from (${window.x}, ${window.y}) ${window.width}x${window.height} to (${newX}, ${newY}) ${newWidth}x${newHeight}`);
+        WindowUtils.bounceWindowToPosition(window.window, newX, newY, newWidth, newHeight);
+        updateWindow(window.window, newX, newY, newWidth, newHeight);
+    }
+}
+
 function updateWindow(window, newX, newY, newWidth, newHeight) {
     // Remove the window from tracking
     removeWindow(window);
@@ -226,7 +373,7 @@ export function enableDynamicTiling() {
     
     const windowDestroyed = global.window_manager.connect('destroy', (wm, actor) => {
         if (enabled && actor.meta_window && isValidWindow(actor.meta_window)) {
-            removeWindow(actor.meta_window);
+            closeWindow(actor.meta_window);
         }
     });
     
