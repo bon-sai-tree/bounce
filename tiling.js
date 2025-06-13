@@ -221,8 +221,12 @@ function fibonacciTiling(windows) {
     // Calculate window positions based on Fibonacci sequence
     const windowRects = calculateFibonacciRects(workArea, windows.length);
     
+    // Reverse the array so that the newest window (typically at the start of the array)
+    // gets the smallest frame (at the end of the windowRects array)
+    const windowsReversed = [...windows].reverse();
+    
     // Apply the calculated positions to windows
-    windows.forEach((window, i) => {
+    windowsReversed.forEach((window, i) => {
         const rect = windowRects[i];
         WindowUtils.bounceWindowToPosition(
             window,
