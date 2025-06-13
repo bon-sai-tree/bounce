@@ -70,6 +70,15 @@ function getSector(windowItem, x, y) {
     }
 }
 
+function applySplit(existingItem, newWindow, newX, newY, newWidth, newHeight, existingX, existingY, existingWidth, existingHeight) {
+    console.log(`[Bounce] Placing new window at (${newX}, ${newY}) ${newWidth}x${newHeight}`);
+    WindowUtils.bounceWindowToPosition(newWindow, newX, newY, newWidth, newHeight);
+    WindowUtils.bounceWindowToPosition(existingItem.window, existingX, existingY, existingWidth, existingHeight);
+    console.log(`[Bounce] AFTER split - existing window moved to: (${existingX}, ${existingY}) ${existingWidth}x${existingHeight}`);
+    updateWindow(existingItem.window, existingX, existingY, existingWidth, existingHeight);
+    addWindow(newWindow, newX, newY, newWidth, newHeight);
+}
+
 function splitWindow(existingItem, newWindow, sector) {
     const { x, y, width, height } = existingItem;
     console.log(`[Bounce] BEFORE split - existing window: (${x}, ${y}) ${width}x${height}`);
@@ -78,39 +87,27 @@ function splitWindow(existingItem, newWindow, sector) {
     switch (sector) {
         case 'left':
             const leftWidth = Math.floor(width / GOLDEN_RATIO);
-            console.log(`[Bounce] Placing new window at (${x}, ${y}) ${leftWidth}x${height}`);
-            WindowUtils.bounceWindowToPosition(newWindow, x, y, leftWidth, height);
-            WindowUtils.bounceWindowToPosition(existingItem.window, x + leftWidth, y, width - leftWidth, height);
-            console.log(`[Bounce] AFTER split - existing window moved to: (${x + leftWidth}, ${y}) ${width - leftWidth}x${height}`);
-            updateWindow(existingItem.window, x + leftWidth, y, width - leftWidth, height);
-            addWindow(newWindow, x, y, leftWidth, height);
+            applySplit(existingItem, newWindow, 
+                x, y, leftWidth, height,
+                x + leftWidth, y, width - leftWidth, height);
             break;
         case 'right':
             const rightWidth = Math.floor(width / GOLDEN_RATIO);
-            console.log(`[Bounce] Placing new window at (${x + width - rightWidth}, ${y}) ${rightWidth}x${height}`);
-            WindowUtils.bounceWindowToPosition(newWindow, x + width - rightWidth, y, rightWidth, height);
-            WindowUtils.bounceWindowToPosition(existingItem.window, x, y, width - rightWidth, height);
-            console.log(`[Bounce] AFTER split - existing window resized to: (${x}, ${y}) ${width - rightWidth}x${height}`);
-            updateWindow(existingItem.window, x, y, width - rightWidth, height);
-            addWindow(newWindow, x + width - rightWidth, y, rightWidth, height);
+            applySplit(existingItem, newWindow,
+                x + width - rightWidth, y, rightWidth, height,
+                x, y, width - rightWidth, height);
             break;
         case 'top':
             const topHeight = Math.floor(height / GOLDEN_RATIO);
-            console.log(`[Bounce] Placing new window at (${x}, ${y}) ${width}x${topHeight}`);
-            WindowUtils.bounceWindowToPosition(newWindow, x, y, width, topHeight);
-            WindowUtils.bounceWindowToPosition(existingItem.window, x, y + topHeight, width, height - topHeight);
-            console.log(`[Bounce] AFTER split - existing window moved to: (${x}, ${y + topHeight}) ${width}x${height - topHeight}`);
-            updateWindow(existingItem.window, x, y + topHeight, width, height - topHeight);
-            addWindow(newWindow, x, y, width, topHeight);
+            applySplit(existingItem, newWindow,
+                x, y, width, topHeight,
+                x, y + topHeight, width, height - topHeight);
             break;
         case 'bottom':
             const bottomHeight = Math.floor(height / GOLDEN_RATIO);
-            console.log(`[Bounce] Placing new window at (${x}, ${y + height - bottomHeight}) ${width}x${bottomHeight}`);
-            WindowUtils.bounceWindowToPosition(newWindow, x, y + height - bottomHeight, width, bottomHeight);
-            WindowUtils.bounceWindowToPosition(existingItem.window, x, y, width, height - bottomHeight);
-            console.log(`[Bounce] AFTER split - existing window resized to: (${x}, ${y}) ${width}x${height - bottomHeight}`);
-            updateWindow(existingItem.window, x, y, width, height - bottomHeight);
-            addWindow(newWindow, x, y + height - bottomHeight, width, bottomHeight);
+            applySplit(existingItem, newWindow,
+                x, y + height - bottomHeight, width, bottomHeight,
+                x, y, width, height - bottomHeight);
             break;
     }
 }
