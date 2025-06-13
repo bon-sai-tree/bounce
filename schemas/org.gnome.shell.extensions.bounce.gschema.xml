@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="bounce">
+  <schema id="org.gnome.shell.extensions.bounce" path="/org/gnome/shell/extensions/bounce/">
+    <key name="toggle-bounce" type="as">
+      <default><![CDATA[['<Super>b']]]></default>
+      <summary>Toggle bounce</summary>
+      <description>Keyboard shortcut to center and resize all windows on current workspace</description>
+    </key>
+  </schema>
+</schemalist>

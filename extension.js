@@ -21,6 +21,8 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {QuickToggle, SystemIndicator} from 'resource:///org/gnome/shell/ui/quickSettings.js';
+import * as WindowUtils from './window.js';
+import {BounceKeybindings} from './keybindings.js';
 
 const ExampleToggle = GObject.registerClass(
 class ExampleToggle extends QuickToggle {
@@ -34,6 +36,7 @@ class ExampleToggle extends QuickToggle {
         this.connect('notify::checked', () => {
             if (this.checked) {
                 console.log('[Bounce] Toggle activated');
+                WindowUtils.centerAllWindows();
             } else {
                 console.log('[Bounce] Toggle deactivated');
             }
@@ -59,14 +62,26 @@ class ExampleIndicator extends SystemIndicator {
 
 export default class QuickSettingsExampleExtension extends Extension {
     enable() {
+        // Initialize the indicator for the quick settings menu
         this._indicator = new ExampleIndicator();
         console.log("[Bounce] Extension enabled");
         Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
+        
+        // Initialize and enable keybindings
+        this._keybindings = new BounceKeybindings(this);
+        this._keybindings.enable();
     }
 
     disable() {
+        // Clean up the indicator
         this._indicator.quickSettingsItems.forEach(item => item.destroy());
         console.log("[Bounce] Extension disabled");
         this._indicator.destroy();
+        
+        // Disable keybindings
+        if (this._keybindings) {
+            this._keybindings.disable();
+            this._keybindings = null;
+        }
     }
 }

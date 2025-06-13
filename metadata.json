@@ -4,5 +4,6 @@
   "uuid": "bounce@bon-sai-tree.github.io",
   "shell-version": [
     "48"
-  ]
+  ],
+  "settings-schema": "org.gnome.shell.extensions.bounce"
 }
