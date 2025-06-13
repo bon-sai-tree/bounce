@@ -117,31 +117,28 @@ function tryExtendFromBorder(border, x, y, width, height) {
 }
 
 function canCoverCompleteBorder(adjacentWindows, border, x, y, width, height) {
-    // Sort windows and check if they can cover the complete border without gaps
-    let sortedWindows = [...adjacentWindows];
+    // Check that adjacent windows don't extend beyond the borders of the removed window
     
     switch (border) {
         case 'left':
         case 'right':
-            // Sort by y coordinate and check vertical coverage
-            sortedWindows.sort((a, b) => a.y - b.y);
-            let currentY = y;
-            for (const window of sortedWindows) {
-                if (window.y > currentY) return false; // Gap found
-                currentY = Math.max(currentY, window.y + window.height);
+            // Check that all adjacent windows are within the vertical bounds of the removed window
+            for (const window of adjacentWindows) {
+                if (window.y < y || window.y + window.height > y + height) {
+                    return false; // Window extends beyond the removed window's vertical bounds
+                }
             }
-            return currentY >= y + height;
+            return true;
             
         case 'top':
         case 'bottom':
-            // Sort by x coordinate and check horizontal coverage
-            sortedWindows.sort((a, b) => a.x - b.x);
-            let currentX = x;
-            for (const window of sortedWindows) {
-                if (window.x > currentX) return false; // Gap found
-                currentX = Math.max(currentX, window.x + window.width);
+            // Check that all adjacent windows are within the horizontal bounds of the removed window
+            for (const window of adjacentWindows) {
+                if (window.x < x || window.x + window.width > x + width) {
+                    return false; // Window extends beyond the removed window's horizontal bounds
+                }
             }
-            return currentX >= x + width;
+            return true;
     }
     
     return false;
