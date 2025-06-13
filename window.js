@@ -19,6 +19,8 @@
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import Meta from 'gi://Meta';
 import GLib from 'gi://GLib';
+import Clutter from 'gi://Clutter';
+import GObject from 'gi://GObject';
 
 // Track signals so we can disconnect them later
 let signalConnections = [];
@@ -58,9 +60,10 @@ export function centerAllWindows() {
  * Centers a specific window and resizes it to 50% of the screen
  * 
  * @param {Meta.Window} window - The window to center
+ * @param {boolean} animate - Whether to animate the transition
  * @returns {boolean} True if the window was centered, false otherwise
  */
-export function centerWindow(window) {
+export function centerWindow(window, animate = true) {
     if (!window) return false;
     
     // Skip special windows that shouldn't be resized
@@ -69,6 +72,12 @@ export function centerWindow(window) {
         return false;
     }
     
+    // If animation is requested, use the bounce animation
+    if (animate) {
+        return animateBounceToCenter(window);
+    }
+    
+    // Otherwise use the immediate centering (for initial setup)
     // Get the monitor that contains the window
     const monitor = window.get_monitor();
     const workArea = window.get_work_area_for_monitor(monitor);
@@ -100,8 +109,9 @@ export function enableForceCentering() {
     console.log('[Bounce] Enabling bounce mode');
     bounceEnabled = true;
     
-    // Center all windows first
-    centerAllWindows();
+    // Center all windows first (without animation for the initial setup)
+    // We'll implement a special version for initial centering
+    centerAllWindowsInitial();
     
     // Connect to the grab operation end signal to detect when window moves finish
     const grabEndSignal = global.display.connect('grab-op-end', (display, metaWindow, grabOp) => {
@@ -156,11 +166,11 @@ export function enableForceCentering() {
              grabOp !== Meta.GrabOp.COMPOSITOR);
         
         if (bounceEnabled && metaWindow && isRegularWindow(metaWindow) && (isMove || isResize)) {
-            console.log(`[Bounce] Window "${metaWindow.get_title()}" ${isMove ? 'moved' : 'resized'} with grab operation: ${grabOp}, returning to center`);
+            console.log(`[Bounce] Window "${metaWindow.get_title()}" ${isMove ? 'moved' : 'resized'} with grab operation: ${grabOp}, returning to center with bounce`);
             
             // Add a tiny delay to ensure the grab is fully completed
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10, () => {
-                centerWindow(metaWindow);
+                centerWindow(metaWindow, true); // true = animate
                 return GLib.SOURCE_REMOVE;
             });
         }
@@ -177,7 +187,7 @@ export function enableForceCentering() {
             // Wait a moment for the window to settle
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
                 console.log(`[Bounce] New window created: ${metaWindow.get_title()}`);
-                centerWindow(metaWindow);
+                centerWindow(metaWindow, true); // true = animate
                 return GLib.SOURCE_REMOVE;
             });
         }
@@ -206,7 +216,7 @@ export function enableForceCentering() {
         // Add a small delay to ensure all size operations are complete
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
             if (bounceEnabled && isRegularWindow(metaWindow)) {
-                centerWindow(metaWindow);
+                centerWindow(metaWindow, true); // true = animate with bounce
             }
             return GLib.SOURCE_REMOVE;
         });
@@ -258,4 +268,122 @@ function isRegularWindow(window) {
  */
 export function isForceCenteringEnabled() {
     return bounceEnabled;
+}
+
+/**
+ * Animation constants
+ */
+const BOUNCE_DURATION = 1000; // milliseconds (slower animation)
+const EASE_IN_OUT_BOUNCE = Clutter.AnimationMode.EASE_IN_OUT_BOUNCE;
+const EASE_OUT_ELASTIC = Clutter.AnimationMode.EASE_OUT_ELASTIC; // More natural bounce
+
+/**
+ * Animates a window to the center of the screen with a bounce effect
+ * 
+ * @param {Meta.Window} window - The window to animate
+ * @returns {boolean} True if the animation was started, false otherwise
+ */
+function animateBounceToCenter(window) {
+    if (!window) return false;
+    
+    // Skip special windows that shouldn't be animated
+    if (!isRegularWindow(window)) {
+        console.log(`[Bounce] Skipping special window for animation: ${window.get_title()}`);
+        return false;
+    }
+    
+    // Get the monitor that contains the window
+    const monitor = window.get_monitor();
+    const workArea = window.get_work_area_for_monitor(monitor);
+    
+    // Calculate 50% of the workarea dimensions
+    const targetWidth = Math.floor(workArea.width * 0.5);
+    const targetHeight = Math.floor(workArea.height * 0.5);
+    
+    // Calculate the center position
+    const targetX = Math.floor(workArea.x + (workArea.width - targetWidth) / 2);
+    const targetY = Math.floor(workArea.y + (workArea.height - targetHeight) / 2);
+    
+    // First ensure window is unmaximized
+    window.unmaximize(Meta.MaximizeFlags.BOTH);
+    
+    // Get current position and size
+    const frameRect = window.get_frame_rect();
+    
+    // Get the window actor for animation
+    const windowActor = window.get_compositor_private();
+    if (!windowActor) {
+        console.log(`[Bounce] Cannot find window actor for: ${window.get_title()}`);
+        // Fall back to immediate positioning
+        window.move_resize_frame(true, targetX, targetY, targetWidth, targetHeight);
+        return false;
+    }
+    
+    // Remove any ongoing animations to avoid conflicts
+    windowActor.remove_all_transitions();
+    
+    // Calculate how far off center the window currently is
+    const centerOffsetX = frameRect.x - targetX;
+    const centerOffsetY = frameRect.y - targetY;
+    
+    // Start with the target size
+    window.move_resize_frame(false, frameRect.x, frameRect.y, targetWidth, targetHeight);
+    
+    // Calculate bounce parameters - we want to start from the current position
+    // and bounce toward the center, not in the opposite direction
+    
+    // For debugging
+    console.log(`[Bounce] Current position: ${frameRect.x},${frameRect.y} Target: ${targetX},${targetY}`);
+    
+    // Start the animation from the current position
+    // No need to move the window as it's already at the starting position
+    
+    console.log(`[Bounce] Animating from ${frameRect.x},${frameRect.y} to center at ${targetX},${targetY}`);
+    
+    // First resize the window immediately to target size
+    window.move_resize_frame(false, frameRect.x, frameRect.y, targetWidth, targetHeight);
+    
+    // Use the built-in Clutter animation system with elastic bounce effect
+    windowActor.ease({
+        x: targetX,
+        y: targetY, 
+        duration: BOUNCE_DURATION,
+        mode: EASE_OUT_ELASTIC,
+        onComplete: () => {
+            // Ensure the window is exactly at the target position and size
+            window.move_resize_frame(true, targetX, targetY, targetWidth, targetHeight);
+            console.log(`[Bounce] Completed animation for: ${window.get_title()}`);
+        }
+    });
+    
+    console.log(`[Bounce] Started bounce animation for window: ${window.get_title()}`);
+    
+    console.log(`[Bounce] Started bounce animation for: ${window.get_title()}`);
+    return true;
+}
+
+/**
+ * Centers all windows on the current workspace without animation (for initial setup)
+ */
+function centerAllWindowsInitial() {
+    // Get the current active workspace
+    const workspaceManager = global.workspace_manager;
+    const activeWorkspace = workspaceManager.get_active_workspace();
+    
+    // Get all windows on the current workspace
+    const windows = global.display.get_tab_list(Meta.TabList.NORMAL, activeWorkspace);
+    
+    console.log(`[Bounce] Initially centering ${windows.length} windows without animation`);
+    
+    let centeredCount = 0;
+    
+    // Center each window without animation
+    windows.forEach(window => {
+        if (centerWindow(window, false)) { // false = no animation
+            centeredCount++;
+        }
+    });
+    
+    console.log(`[Bounce] Successfully centered ${centeredCount} windows`);
+    return centeredCount;
 }
