@@ -71,25 +71,30 @@ function getSector(windowItem, x, y) {
 
 function splitWindow(existingItem, newWindow, sector) {
     const { x, y, width, height } = existingItem;
+    console.log(`[Bounce] Splitting window in ${sector} sector`);
     
     switch (sector) {
         case 'left':
             const leftWidth = Math.floor(width / GOLDEN_RATIO);
+            console.log(`[Bounce] Placing new window at (${x}, ${y}) ${leftWidth}x${height}`);
             WindowUtils.bounceWindowToPosition(newWindow, x, y, leftWidth, height);
             WindowUtils.bounceWindowToPosition(existingItem.window, x + leftWidth, y, width - leftWidth, height);
             break;
         case 'right':
             const rightWidth = Math.floor(width / GOLDEN_RATIO);
+            console.log(`[Bounce] Placing new window at (${x + width - rightWidth}, ${y}) ${rightWidth}x${height}`);
             WindowUtils.bounceWindowToPosition(newWindow, x + width - rightWidth, y, rightWidth, height);
             WindowUtils.bounceWindowToPosition(existingItem.window, x, y, width - rightWidth, height);
             break;
         case 'top':
             const topHeight = Math.floor(height / GOLDEN_RATIO);
+            console.log(`[Bounce] Placing new window at (${x}, ${y}) ${width}x${topHeight}`);
             WindowUtils.bounceWindowToPosition(newWindow, x, y, width, topHeight);
             WindowUtils.bounceWindowToPosition(existingItem.window, x, y + topHeight, width, height - topHeight);
             break;
         case 'bottom':
             const bottomHeight = Math.floor(height / GOLDEN_RATIO);
+            console.log(`[Bounce] Placing new window at (${x}, ${y + height - bottomHeight}) ${width}x${bottomHeight}`);
             WindowUtils.bounceWindowToPosition(newWindow, x, y + height - bottomHeight, width, bottomHeight);
             WindowUtils.bounceWindowToPosition(existingItem.window, x, y, width, height - bottomHeight);
             break;
@@ -103,6 +108,7 @@ function tileAll() {
     const activeWindows = global.display.get_tab_list(Meta.TabList.NORMAL, global.workspace_manager.get_active_workspace())
                           .filter(isValidWindow);
     
+    console.log(`[Bounce] Tiling ${activeWindows.length} windows`);
     windows = [];
     
     if (activeWindows.length === 0) return;
@@ -141,6 +147,7 @@ function fibonacciTile(windowList, x, y, width, height) {
 
 export function enableDynamicTiling() {
     if (enabled) return;
+    console.log('[Bounce] Enabling dynamic tiling');
     enabled = true;
     
     tileAll();
@@ -157,6 +164,7 @@ export function enableDynamicTiling() {
     const windowCreated = global.display.connect('window-created', (display, window) => {
         if (!enabled || !isValidWindow(window)) return;
         
+        console.log(`[Bounce] New window created: ${window.get_title()}`);
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
             const [x, y] = global.get_pointer();
             const targetWindow = findWindowAt(x, y);
@@ -187,6 +195,7 @@ export function enableDynamicTiling() {
 
 export function disableDynamicTiling() {
     if (!enabled) return;
+    console.log('[Bounce] Disabling dynamic tiling');
     enabled = false;
     
     signals.forEach(s => s.object.disconnect(s.id));
