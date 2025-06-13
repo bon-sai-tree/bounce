@@ -24,6 +24,7 @@ import GObject from 'gi://GObject';
 
 let signalConnections = [];
 let bounceEnabled = false;
+const GAP = 8;
 
 function isRegularWindow(window) {
     if (!window) return false;
@@ -37,6 +38,12 @@ function isRegularWindow(window) {
 
 export function bounceWindowToPosition(window, targetX, targetY, targetWidth, targetHeight) {
     if (!isRegularWindow(window)) return false;
+    
+    // Apply gaps directly here
+    targetX += GAP;
+    targetY += GAP;
+    targetWidth -= 2 * GAP;
+    targetHeight -= 2 * GAP;
     
     window.unmaximize(Meta.MaximizeFlags.BOTH);
     
