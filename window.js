@@ -40,40 +40,92 @@ export function bounceWindowToPosition(window, targetX, targetY, targetWidth, ta
     
     window.unmaximize(Meta.MaximizeFlags.BOTH);
     
+    // Ensure the target position is valid by getting the current monitor boundaries
+    const monitor = window.get_monitor();
+    const workArea = window.get_work_area_for_monitor(monitor);
+    
+    // Apply constraints to ensure the window stays within screen boundaries
+    const safeTargetX = Math.max(workArea.x, Math.min(targetX, workArea.x + workArea.width - targetWidth));
+    const safeTargetY = Math.max(workArea.y, Math.min(targetY, workArea.y + workArea.height - targetHeight));
+    
+    // Use the constrained values from now on
+    targetX = safeTargetX;
+    targetY = safeTargetY;
+    
     const actor = window.get_compositor_private();
     if (!actor) {
         window.move_resize_frame(true, targetX, targetY, targetWidth, targetHeight);
         return false;
     }
     
+    // Stop any ongoing animations
     actor.remove_all_transitions();
     
     const frameRect = window.get_frame_rect();
     const actorRect = {x: actor.x, y: actor.y, width: actor.width, height: actor.height};
     const offset = {x: frameRect.x - actorRect.x, y: frameRect.y - actorRect.y};
     
+    // First resize the window but keep the position
     window.move_resize_frame(false, frameRect.x, frameRect.y, targetWidth, targetHeight);
     
+    // Track whether animation is still active to avoid race conditions
+    let isAnimating = true;
+    
+    // Create a reliable sync function that properly tracks position
     let timeoutId = null;
     const syncFrame = () => {
-        if (!window.get_compositor_private()) {
-            if (timeoutId) GLib.source_remove(timeoutId);
-            return false;
+        if (!window.get_compositor_private() || !isAnimating) {
+            if (timeoutId) {
+                GLib.source_remove(timeoutId);
+                timeoutId = null;
+            }
+            return GLib.SOURCE_REMOVE;
         }
-        window.move_frame(false, actor.x + offset.x, actor.y + offset.y);
-        return true;
+        
+        // Calculate exact actor position 
+        const newFrameX = Math.round(actor.x + offset.x);
+        const newFrameY = Math.round(actor.y + offset.y);
+        
+        // Move the window frame to match actor position
+        window.move_frame(false, newFrameX, newFrameY);
+        
+        return GLib.SOURCE_CONTINUE;
     };
     
+    // Set up sync on a relatively fast timer for smoother animation
     timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10, syncFrame);
     
+    // Begin the animation with the elastic bounce effect
     actor.ease({
         x: targetX - offset.x,
         y: targetY - offset.y,
         duration: 800,
         mode: Clutter.AnimationMode.EASE_OUT_ELASTIC,
         onComplete: () => {
-            if (timeoutId) GLib.source_remove(timeoutId);
+            // Animation is done
+            isAnimating = false;
+            
+            // Clean up the timeout
+            if (timeoutId) {
+                GLib.source_remove(timeoutId);
+                timeoutId = null;
+            }
+            
+            // Final positioning - this ensures the window ends up exactly at the target
+            actor.set_position(targetX - offset.x, targetY - offset.y);
             window.move_resize_frame(true, targetX, targetY, targetWidth, targetHeight);
+            
+            // Double check position after a short delay
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                if (!window.get_compositor_private()) return GLib.SOURCE_REMOVE;
+                
+                const finalRect = window.get_frame_rect();
+                if (finalRect.x !== targetX || finalRect.y !== targetY) {
+                    // Force position correction if needed
+                    window.move_resize_frame(true, targetX, targetY, targetWidth, targetHeight);
+                }
+                return GLib.SOURCE_REMOVE;
+            });
         }
     });
     
