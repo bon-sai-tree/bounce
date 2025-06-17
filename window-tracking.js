@@ -86,42 +86,26 @@ function tryExtendFromBorder(border, x, y, width, height) {
     switch (border) {
         case 'left':
             // Find windows whose right edge touches the left edge of removed window
-            adjacentWindows = windows.filter(w => 
-                w.x + w.width === x && 
-                w.y <= y && 
-                w.y + w.height >= y + height
-            );
+            adjacentWindows = windows.filter(w => w.x + w.width === x);
             break;
         case 'top':
             // Find windows whose bottom edge touches the top edge of removed window
-            adjacentWindows = windows.filter(w => 
-                w.y + w.height === y && 
-                w.x <= x && 
-                w.x + w.width >= x + width
-            );
+            adjacentWindows = windows.filter(w => w.y + w.height === y);
             break;
         case 'right':
             // Find windows whose left edge touches the right edge of removed window
-            adjacentWindows = windows.filter(w => 
-                w.x === x + width && 
-                w.y <= y && 
-                w.y + w.height >= y + height
-            );
+            adjacentWindows = windows.filter(w => w.x === x + width);
             break;
         case 'bottom':
             // Find windows whose top edge touches the bottom edge of removed window
-            adjacentWindows = windows.filter(w => 
-                w.y === y + height && 
-                w.x <= x && 
-                w.x + w.width >= x + width
-            );
+            adjacentWindows = windows.filter(w => w.y === y + height);
             break;
     }
     
     if (adjacentWindows.length === 0) return false;
     
-    // Check if the adjacent windows can completely cover the border
-    if (canCoverCompleteBorder(adjacentWindows, border, x, y, width, height)) {
+    // Check if the adjacent windows collectively cover the entire border
+    if (doBorderPixelsMatch(adjacentWindows, border, x, y, width, height)) {
         extendWindows(adjacentWindows, border, x, y, width, height);
         return true;
     }
@@ -129,32 +113,51 @@ function tryExtendFromBorder(border, x, y, width, height) {
     return false;
 }
 
-function canCoverCompleteBorder(adjacentWindows, border, x, y, width, height) {
-    // Check that adjacent windows don't extend beyond the borders of the removed window
+function doBorderPixelsMatch(adjacentWindows, border, x, y, width, height) {
+    // Create set of pixels that the removed window's border occupies
+    const removedBorderPixels = new Set();
+    
+    // Create set of pixels that adjacent windows collectively cover
+    const coveredPixels = new Set();
     
     switch (border) {
         case 'left':
         case 'right':
-            // Check that all adjacent windows are within the vertical bounds of the removed window
+            // Border is vertical - check y pixels
+            for (let py = y; py < y + height; py++) {
+                removedBorderPixels.add(py);
+            }
+            
             for (const window of adjacentWindows) {
-                if (window.y < y || window.y + window.height > y + height) {
-                    return false; // Window extends beyond the removed window's vertical bounds
+                for (let py = window.y; py < window.y + window.height; py++) {
+                    coveredPixels.add(py);
                 }
             }
-            return true;
+            break;
             
         case 'top':
         case 'bottom':
-            // Check that all adjacent windows are within the horizontal bounds of the removed window
+            // Border is horizontal - check x pixels
+            for (let px = x; px < x + width; px++) {
+                removedBorderPixels.add(px);
+            }
+            
             for (const window of adjacentWindows) {
-                if (window.x < x || window.x + window.width > x + width) {
-                    return false; // Window extends beyond the removed window's horizontal bounds
+                for (let px = window.x; px < window.x + window.width; px++) {
+                    coveredPixels.add(px);
                 }
             }
-            return true;
+            break;
     }
     
-    return false;
+    // Check if the sets are exactly the same
+    if (removedBorderPixels.size !== coveredPixels.size) return false;
+    
+    for (const pixel of removedBorderPixels) {
+        if (!coveredPixels.has(pixel)) return false;
+    }
+    
+    return true;
 }
 
 function extendWindows(adjacentWindows, border, x, y, width, height) {
