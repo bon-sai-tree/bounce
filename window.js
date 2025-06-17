@@ -36,6 +36,32 @@ function isRegularWindow(window) {
            window.get_maximized() === 0;
 }
 
+export function moveWindowToPositionImmediately(window, targetX, targetY, targetWidth, targetHeight) {
+    if (!isRegularWindow(window)) return false;
+    
+    // Apply gaps directly here
+    targetX += GAP;
+    targetY += GAP;
+    targetWidth -= 2 * GAP;
+    targetHeight -= 2 * GAP;
+    
+    window.unmaximize(Meta.MaximizeFlags.BOTH);
+    
+    // Ensure the target position is valid by getting the current monitor boundaries
+    const monitor = window.get_monitor();
+    const workArea = window.get_work_area_for_monitor(monitor);
+    
+    // Apply constraints to ensure the window stays within screen boundaries
+    const safeTargetX = Math.max(workArea.x, Math.min(targetX, workArea.x + workArea.width - targetWidth));
+    const safeTargetY = Math.max(workArea.y, Math.min(targetY, workArea.y + workArea.height - targetHeight));
+    
+    // Move window immediately without animation
+    window.move_resize_frame(true, safeTargetX, safeTargetY, targetWidth, targetHeight);
+    
+    console.log(`[Bounce] Moved window immediately to (${safeTargetX}, ${safeTargetY}) ${targetWidth}x${targetHeight}`);
+    return true;
+}
+
 export function bounceWindowToPosition(window, targetX, targetY, targetWidth, targetHeight) {
     if (!isRegularWindow(window)) return false;
     

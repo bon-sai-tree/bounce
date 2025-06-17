@@ -8,6 +8,60 @@ let signals = [];
 let windows = [];
 const GOLDEN_RATIO = 1.618;
 
+// Store original window placement signal
+let placementOverrideSignal = null;
+
+function overrideWindowPlacement() {
+    if (!placementOverrideSignal) {
+        console.log('[Bounce] Setting up window placement override');
+        
+        // Hook into the window manager's map signal for immediate placement
+        placementOverrideSignal = global.window_manager.connect('map', (wm, actor) => {
+            if (!enabled) return;
+            
+            const window = actor.meta_window;
+            if (!isValidWindow(window)) return;
+            
+            console.log(`[Bounce] Intercepting window map: ${window.get_title()}`);
+            
+            // Check if this window is already in our tracking (avoid double processing)
+            if (windows.some(w => w.window === window)) {
+                console.log(`[Bounce] Window already tracked, skipping map processing`);
+                return;
+            }
+            
+            // Handle first window case
+            if (windows.length === 0) {
+                console.log(`[Bounce] First window - placing immediately in full work area`);
+                const workArea = getWorkArea();
+                WindowUtils.moveWindowToPositionImmediately(window, workArea.x, workArea.y, workArea.width, workArea.height);
+                addWindow(window, workArea.x, workArea.y, workArea.width, workArea.height);
+                return;
+            }
+            
+            // Find target window for splitting
+            const [mouseX, mouseY] = global.get_pointer();
+            const targetWindow = findWindowAt(mouseX, mouseY);
+            
+            if (targetWindow) {
+                const sector = getSector(targetWindow, mouseX, mouseY);
+                splitWindow(targetWindow, window, sector);
+            } else {
+                // No target window, use default tiling
+                tileAll();
+            } 
+        });
+    }
+}
+
+function restoreWindowPlacement() {
+    if (placementOverrideSignal) {
+        global.window_manager.disconnect(placementOverrideSignal);
+        placementOverrideSignal = null;
+        console.log('[Bounce] Restored original window placement');
+    }
+}
+
 function isValidWindow(window) {
     return window && 
            !window.is_skip_taskbar() && 
@@ -216,7 +270,9 @@ function getSector(windowItem, x, y) {
 
 function applySplit(existingItem, newWindow, newX, newY, newWidth, newHeight, existingX, existingY, existingWidth, existingHeight) {
     console.log(`[Bounce] Placing new window at (${newX}, ${newY}) ${newWidth}x${newHeight}`);
-    WindowUtils.bounceWindowToPosition(newWindow, newX, newY, newWidth, newHeight);
+    // Place new window immediately without animation but with gaps
+    WindowUtils.moveWindowToPositionImmediately(newWindow, newX, newY, newWidth, newHeight);
+    // Animate existing window to new position
     WindowUtils.bounceWindowToPosition(existingItem.window, existingX, existingY, existingWidth, existingHeight);
     console.log(`[Bounce] AFTER split - existing window moved to: (${existingX}, ${existingY}) ${existingWidth}x${existingHeight}`);
     updateWindow(existingItem.window, existingX, existingY, existingWidth, existingHeight);
@@ -336,6 +392,9 @@ export function enableDynamicTiling() {
     console.log('[Bounce] Enabling dynamic tiling');
     enabled = true;
     
+    // Override window placement for immediate positioning
+    overrideWindowPlacement();
+    
     tileAll();
     
     const grabEnd = global.display.connect('grab-op-end', (display, window, op) => {
@@ -348,26 +407,7 @@ export function enableDynamicTiling() {
             });
         }
     });
-    
-    const windowCreated = global.display.connect('window-created', (display, window) => {
-        if (!enabled || !isValidWindow(window)) return;
-        
-        console.log(`[Bounce] New window created: ${window.get_title()}`);
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-            const [x, y] = global.get_pointer();
-            const targetWindow = findWindowAt(x, y);
-            
-            if (targetWindow) {
-                const sector = getSector(targetWindow, x, y);
-                splitWindow(targetWindow, window, sector);
-                // splitWindow already handles adding the new window with correct coordinates
-            } else {
-                tileAll();
-            }
-            return GLib.SOURCE_REMOVE;
-        });
-    });
-    
+
     const windowDestroyed = global.window_manager.connect('destroy', (wm, actor) => {
         if (enabled && actor.meta_window && isValidWindow(actor.meta_window)) {
             closeWindow(actor.meta_window);
@@ -376,7 +416,6 @@ export function enableDynamicTiling() {
     
     signals.push(
         { object: global.display, id: grabEnd },
-        { object: global.display, id: windowCreated },
         { object: global.window_manager, id: windowDestroyed }
     );
 }
@@ -385,6 +424,9 @@ export function disableDynamicTiling() {
     if (!enabled) return;
     console.log('[Bounce] Disabling dynamic tiling');
     enabled = false;
+    
+    // Restore original window placement
+    restoreWindowPlacement();
     
     signals.forEach(s => s.object.disconnect(s.id));
     signals = [];
