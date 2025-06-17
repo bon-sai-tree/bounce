@@ -4,7 +4,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {QuickToggle, SystemIndicator} from 'resource:///org/gnome/shell/ui/quickSettings.js';
-import * as DynamicUtils from './dynamic.js';
+import * as TilingUtils from './tiling.js';
 import {BounceKeybindings} from './keybindings.js';
 
 const DynamicTilingToggle = GObject.registerClass(
@@ -19,10 +19,10 @@ class DynamicTilingToggle extends QuickToggle {
         this.connect('notify::checked', () => {
             if (this.checked) {
                 console.log('[Bounce] Dynamic tiling activated');
-                DynamicUtils.enableDynamicTiling();
+                TilingUtils.enableDynamicTiling();
             } else {
                 console.log('[Bounce] Dynamic tiling deactivated');
-                DynamicUtils.disableDynamicTiling();
+                TilingUtils.disableDynamicTiling();
             }
         });
     }
@@ -59,7 +59,7 @@ export default class BounceExtension extends Extension {
 
     disable() {
         // Make sure dynamic tiling is disabled
-        DynamicUtils.disableDynamicTiling();
+        TilingUtils.disableDynamicTiling();
         
         // Clean up the indicator
         this._indicator.quickSettingsItems.forEach(item => item.destroy());

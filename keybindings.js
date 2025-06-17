@@ -3,7 +3,7 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as DynamicUtils from './dynamic.js';
+import * as TilingUtils from './tiling.js';
 
 /**
  * Keybindings class to handle keyboard shortcuts for the Bounce extension
@@ -58,11 +58,11 @@ class BounceKeybindings extends GObject.Object {
             console.log(`[Bounce] Dynamic tiling state changed to: ${toggle.checked ? 'on' : 'off'}`);
         } else {
             // Fallback: if the indicator isn't available, toggle directly
-            if (DynamicUtils.isDynamicTilingEnabled()) {
-                DynamicUtils.disableDynamicTiling();
+            if (TilingUtils.isDynamicTilingEnabled()) {
+                TilingUtils.disableDynamicTiling();
                 console.log('[Bounce] Dynamic tiling disabled');
             } else {
-                DynamicUtils.enableDynamicTiling();
+                TilingUtils.enableDynamicTiling();
                 console.log('[Bounce] Dynamic tiling enabled');
             }
         }
