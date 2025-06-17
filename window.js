@@ -91,74 +91,53 @@ export function bounceWindowToPosition(window, targetX, targetY, targetWidth, ta
         return false;
     }
     
-    // Stop any ongoing animations
+    // Stop any ongoing animations to prevent conflicts
     actor.remove_all_transitions();
     
     const frameRect = window.get_frame_rect();
     const actorRect = {x: actor.x, y: actor.y, width: actor.width, height: actor.height};
     const offset = {x: frameRect.x - actorRect.x, y: frameRect.y - actorRect.y};
     
-    // First resize the window but keep the position
+    // Calculate target actor position
+    const targetActorX = targetX - offset.x;
+    const targetActorY = targetY - offset.y;
+    
+    // Store initial dimensions for resize animation
+    const initialWidth = frameRect.width;
+    const initialHeight = frameRect.height;
+    
+    // Calculate scale factors for the resize animation
+    const scaleX = targetWidth / initialWidth;
+    const scaleY = targetHeight / initialHeight;
+    
+    console.log(`[Bounce] Animating resize from ${initialWidth}x${initialHeight} to ${targetWidth}x${targetHeight} (scale: ${scaleX}, ${scaleY})`);
+    
+    // Immediately set the target window size (this is instant, no animation support in Meta.Window)
     window.move_resize_frame(false, frameRect.x, frameRect.y, targetWidth, targetHeight);
     
-    // Track whether animation is still active to avoid race conditions
-    let isAnimating = true;
+    // Create visual resize effect by scaling the actor temporarily
+    // This creates the illusion of smooth resizing while the window content adjusts
+    const originalScaleX = actor.scale_x;
+    const originalScaleY = actor.scale_y;
     
-    // Create a reliable sync function that properly tracks position
-    let timeoutId = null;
-    const syncFrame = () => {
-        if (!window.get_compositor_private() || !isAnimating) {
-            if (timeoutId) {
-                GLib.source_remove(timeoutId);
-                timeoutId = null;
-            }
-            return GLib.SOURCE_REMOVE;
-        }
-        
-        // Calculate exact actor position 
-        const newFrameX = Math.round(actor.x + offset.x);
-        const newFrameY = Math.round(actor.y + offset.y);
-        
-        // Move the window frame to match actor position
-        window.move_frame(false, newFrameX, newFrameY);
-        
-        return GLib.SOURCE_CONTINUE;
-    };
+    // Start with the actor scaled to represent the old size
+    actor.set_scale(originalScaleX / scaleX, originalScaleY / scaleY);
     
-    // Set up sync on a relatively fast timer for smoother animation
-    timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10, syncFrame);
-    
-    // Begin the animation with the elastic bounce effect
+    // Animate both position and scale to create smooth movement and resize effect
     actor.ease({
-        x: targetX - offset.x,
-        y: targetY - offset.y,
-        duration: 800,
-        mode: Clutter.AnimationMode.EASE_OUT_ELASTIC,
+        x: targetActorX,
+        y: targetActorY,
+        scale_x: originalScaleX,
+        scale_y: originalScaleY,
+        duration: 400,
+        mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
         onComplete: () => {
-            // Animation is done
-            isAnimating = false;
-            
-            // Clean up the timeout
-            if (timeoutId) {
-                GLib.source_remove(timeoutId);
-                timeoutId = null;
-            }
-            
-            // Final positioning - this ensures the window ends up exactly at the target
-            actor.set_position(targetX - offset.x, targetY - offset.y);
+            // Ensure final state is correct
+            actor.set_position(targetActorX, targetActorY);
+            actor.set_scale(originalScaleX, originalScaleY);
             window.move_resize_frame(true, targetX, targetY, targetWidth, targetHeight);
             
-            // Double check position after a short delay
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-                if (!window.get_compositor_private()) return GLib.SOURCE_REMOVE;
-                
-                const finalRect = window.get_frame_rect();
-                if (finalRect.x !== targetX || finalRect.y !== targetY) {
-                    // Force position correction if needed
-                    window.move_resize_frame(true, targetX, targetY, targetWidth, targetHeight);
-                }
-                return GLib.SOURCE_REMOVE;
-            });
+            console.log(`[Bounce] Animation completed: (${targetX}, ${targetY}) ${targetWidth}x${targetHeight}`);
         }
     });
     
