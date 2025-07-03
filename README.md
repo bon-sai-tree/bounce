@@ -2,6 +2,8 @@
 
 A work in progress GNOME Shell extension that automatically tiles your windows in a Fibonacci spiral pattern with smooth bounce animations.
 
+https://github.com/user-attachments/assets/d0d35ecb-0010-4a9f-b11c-08f4e72b0d2a
+
 ## ✨ Features
 
 - **Fibonacci Spiral Tiling**: Automatically arranges windows using the golden ratio
