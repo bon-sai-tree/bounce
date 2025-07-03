@@ -1,6 +1,6 @@
 # Makefile for Bounce extension
 
-.PHONY: all schemas clean install uninstall
+.PHONY: all schemas 
 
 all: schemas
 
